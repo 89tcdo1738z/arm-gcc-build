@@ -17,6 +17,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends ca-certificates
           sudo update-ca-certificates
+          git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt
 
       - name: Checkout repository
         uses: actions/checkout@v4
