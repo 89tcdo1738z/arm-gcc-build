@@ -1,0 +1,105 @@
+# =============================================================================
+# GitLab CI/CD 流水线配置
+# 文件位置：.gitlab-ci.yml（仓库根目录）
+# =============================================================================
+#
+# 流水线阶段：
+#   build → test → lint
+#
+# GitLab CI 与 GitHub Actions 的核心区别：
+#   • GitLab 每个 job 天生运行在 Docker 容器里（通过 image: 指定）
+#   • 无需 "container:" 嵌套，image: 直接写在 job 顶层
+#   • 用 extends: 和 .模板 复用配置（类似 GitHub Actions 的 composite action）
+#
+# =============================================================================
+
+stages:
+  - build    # 阶段 1：编译 ARM 固件
+  - test     # 阶段 2：单元测试
+  - lint     # 阶段 3：代码格式检查
+
+# ─── 全局默认值（所有 job 继承）──────────────────────────────────────────────
+default:
+  # 如果 job 失败，最多重试 1 次（网络抖动等偶发问题）
+  retry:
+    max: 1
+    when: runner_system_failure
+
+# ─── 可重用模板：ARM 交叉编译环境 ────────────────────────────────────────────
+# 以 "." 开头的 job 不会直接执行，只作为模板被 extends 引用
+.arm-toolchain:
+  image: debian:bookworm-slim    # Docker 镜像：官方轻量级 Debian
+  before_script:
+    # before_script 在每个 extends 此模板的 job 的 script 前自动执行
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+        gcc-arm-none-eabi
+        binutils-arm-none-eabi
+        make
+    - arm-none-eabi-gcc --version   # 打印版本，方便 CI 日志追溯
+
+# =============================================================================
+# Job 1：编译 ARM 固件
+# =============================================================================
+build-firmware:
+  extends: .arm-toolchain     # 继承模板，获得 image 和 before_script
+  stage: build
+
+  script:
+    - make all                # 运行根目录 Makefile
+
+  # artifacts：将编译产物保存，后续 job 或开发者可下载
+  artifacts:
+    name: "firmware-${CI_COMMIT_SHORT_SHA}"   # 用短 commit hash 命名
+    paths:
+      - build/ci/*.elf
+      - build/ci/*.map
+    expire_in: 1 week         # 1 周后自动清理，节省存储
+
+  # rules：控制何时触发此 job（不写则每次都触发）
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'  # MR 时触发
+    - if: '$CI_COMMIT_BRANCH == "main"'                   # 合并到 main 时触发
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_BRANCH =~ /^dev/'                   # dev* 分支也触发
+
+# =============================================================================
+# Job 2：宿主机单元测试
+# =============================================================================
+unit-tests:
+  # 使用官方 GCC Docker 镜像（内置 gcc + make，开箱即用）
+  image: gcc:latest
+  stage: test
+
+  script:
+    - cd tests && make test
+
+  # 从测试输出中提取覆盖率数字（匹配 unity.h 打印的格式）
+  coverage: '/=== 测试结果：(\d+) 通过/'
+
+  # 单元测试任何分支都跑
+  rules:
+    - when: always
+
+# =============================================================================
+# Job 3：代码格式检查
+# =============================================================================
+lint:
+  image: debian:bookworm-slim
+  stage: lint
+
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq clang-format
+
+  script:
+    - |
+      find project/src project/inc project/board \
+        \( -name "*.c" -o -name "*.h" \) \
+        -print0 | xargs -0 clang-format --dry-run --Werror --style=file
+    # 格式不符时 clang-format 以非零退出 → job 失败（可见警告）
+
+  allow_failure: true   # 初期设为 true，仅作提示；团队统一格式后去掉
+
+  rules:
+    - when: always

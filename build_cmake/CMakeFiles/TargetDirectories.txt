@@ -1,0 +1,3 @@
+C:/Users/Admin/Desktop/test/at32f403a_template-template/build_cmake/CMakeFiles/at32f403a_template.elf.dir
+C:/Users/Admin/Desktop/test/at32f403a_template-template/build_cmake/CMakeFiles/edit_cache.dir
+C:/Users/Admin/Desktop/test/at32f403a_template-template/build_cmake/CMakeFiles/rebuild_cache.dir

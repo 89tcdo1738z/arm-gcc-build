@@ -1,0 +1,85 @@
+version: "4.1"
+name: at32f403a_template
+type: ARM
+deviceName: null
+packDir: null
+srcDirs:
+  - libraries
+  - project
+virtualFolder:
+  name: <virtual_root>
+  files: []
+  folders: []
+dependenceList: []
+outDir: build
+miscInfo:
+  uid: aadd6b1a734920d9d5da9e3ef0996e9f
+targets:
+  Debug:
+    cppPreprocessAttrs:
+      defineList:
+        - _DEBUG
+        - USE_STDPERIPH_DRIVER
+        - AT_START_F403A_V1
+        - AT32F403AVGT7
+      incList:
+        - libraries/cmsis/cm4/core_support
+        - libraries/cmsis/cm4/device_support
+        - libraries/drivers/inc
+        - project/inc
+        - project/board
+      libList: []
+    excludeList:
+      - libraries/cmsis/cm4/device_support/startup/mdk/startup_at32f403a_407.s
+      - libraries/cmsis/cm4/device_support/startup/iar/startup_at32f403a_407.s
+      - libraries/cmsis/dsp
+      - project/src/startup_at32f403a_407.s
+    settings:
+      debugger: cortex-debug
+    toolchain: GCC
+    toolchainConfigMap:
+      GCC:
+        archExtensions: ""
+        cpuType: Cortex-M4
+        floatingPointHardware: none
+        options:
+          version: 5
+          afterBuildTasks: []
+          asm-compiler: {}
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            language-c: c11
+            language-cpp: c++11
+            one-elf-section-per-data: true
+            one-elf-section-per-function: true
+            optimization: level-debug
+            warnings: all-warnings
+          global:
+            $float-abi-type: softfp
+            misc-control: --specs=nosys.specs --specs=nano.specs
+            output-debug-info: enable
+          linker:
+            LIB_FLAGS: -lm
+            output-format: elf
+            remove-unused-input-sections: true
+        scatterFilePath: project/misc/AT32F403AxG_FLASH.ld
+        storageLayout:
+          RAM: []
+          ROM: []
+        useCustomScatterFile: true
+    uploadConfigMap:
+      JLink:
+        baseAddr: ""
+        bin: ""
+        cpuInfo:
+          cpuName: "null"
+          vendor: "null"
+        otherCmds: ""
+        proType: 1
+        speed: 8000
+      OpenOCD:
+        baseAddr: "0x08000000"
+        bin: ""
+        interface: atlink
+        target: at32f403axG
+    uploader: OpenOCD

@@ -1,0 +1,61 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "MinGW Makefiles",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm-none-eabi.cmake",
+                "TOOLCHAIN_DIR": "C:/Program Files (x86)/GNU Arm Embedded Toolchain/10 2021.10"
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug (MinGW)",
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/build_cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "Release (MinGW)",
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/build_release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "ci",
+            "displayName": "CI (Linux / Unix Makefiles)",
+            "description": "用于 GitHub Actions，工具链来自 PATH，无需 TOOLCHAIN_DIR",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build_ci",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm-none-eabi.cmake",
+                "CMAKE_BUILD_TYPE": "Release",
+                "TOOLCHAIN_DIR": ""
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "debug",
+            "configurePreset": "debug",
+            "jobs": 8
+        },
+        {
+            "name": "release",
+            "configurePreset": "release",
+            "jobs": 8
+        },
+        {
+            "name": "ci",
+            "configurePreset": "ci",
+            "jobs": 4
+        }
+    ]
+}
