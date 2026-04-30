@@ -26,6 +26,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             gcc-arm-none-eabi \
             binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libnewlib-dev \
             cmake \
             make
 
@@ -33,10 +35,15 @@ jobs:
         run: arm-none-eabi-gcc --version
 
       - name: Configure (CMake)
-        run: cmake --preset ci
+        run: |
+          cmake -B build_ci \
+            -G "Unix Makefiles" \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTOOLCHAIN_DIR=""
 
       - name: Build
-        run: cmake --build --preset ci
+        run: cmake --build build_ci -j4
 
       - name: Print firmware size
         run: arm-none-eabi-size build_ci/at32f403a_template.elf
