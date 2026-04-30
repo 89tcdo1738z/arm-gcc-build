@@ -1,127 +1,63 @@
-# =============================================================================
-# GitHub Actions CI 流水线
-# 文件位置：.github/workflows/ci.yml
-# =============================================================================
-#
-# 流水线架构（3 个并行 Job）：
-#
-#   push / PR
-#      │
-#      ├── [Job 1] build-firmware ────── Docker(debian) + apt arm-none-eabi-gcc
-#      │              │                  → 交叉编译 → 上传 .elf artifact
-#      │
-#      ├── [Job 2] unit-tests ─────────── ubuntu-latest 自带 gcc
-#      │              │                  → cd tests && make test
-#      │
-#      └── [Job 3] lint ──────────────── clang-format --dry-run
-#
-# =============================================================================
+name: CI - AT32F403A Build
 
-name: CI — AT32F403A 固件构建与测试
-
-# ─── 触发条件 ───────────────────────────────────────────────────────────────
 on:
   push:
-    branches: ["**"]          # 任何分支 push 都触发
+    branches: ["**"]
   pull_request:
-    branches: [main, master]  # 向 main/master 发起 PR 时触发
+    branches: [main, master]
 
-# ─── 全局权限（最小权限原则）───────────────────────────────────────────────
 permissions:
   contents: read
 
 jobs:
-  # ===========================================================================
-  # Job 1：交叉编译 ARM 固件
-  # ===========================================================================
-  # 关键点："container:" 让整个 job 在指定 Docker 镜像内运行。
-  # 这就是"配合 Docker 镜像实现自动编译"的核心。
-  # ===========================================================================
   build-firmware:
-    name: "🔨 交叉编译 (arm-none-eabi-gcc)"
-    runs-on: ubuntu-latest   # GitHub 托管的 Linux runner
+    name: "Cross Compile (arm-none-eabi-gcc)"
+    runs-on: ubuntu-latest
 
-    # ─── 在此 Docker 镜像内运行所有 steps ──────────────────────────────────
-    # 使用官方 debian slim 作为基础，再用 apt 安装工具链。
-    # 好处：镜像通用、不依赖第三方 ARM 镜像、apt 版本稳定。
     container:
       image: debian:bookworm-slim
 
     steps:
-      # ── 步骤 1：安装 ARM 交叉编译工具链 ───────────────────────────────────
-      # 必须在 checkout 之前安装（容器内默认没有 git）
-      - name: 安装 ARM GCC 工具链
+      - name: Install dependencies
         run: |
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends \
             gcc-arm-none-eabi \
             binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libnewlib-dev \
+            cmake \
             make \
+            ca-certificates \
             git
-          arm-none-eabi-gcc --version   # 打印版本，方便排查问题
+          update-ca-certificates
+          git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt
+          arm-none-eabi-gcc --version
 
-      # ── 步骤 2：拉取仓库代码 ───────────────────────────────────────────────
-      - name: 拉取代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 步骤 3：运行 Makefile 编译 ──────────────────────────────────────────
-      - name: make all
-        run: make all
-        # 如果编译失败（make 返回非零），job 自动标红
+      - name: CMake configure
+        run: |
+          cmake -B build_ci \
+            -G "Unix Makefiles" \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTOOLCHAIN_DIR=""
 
-      # ── 步骤 4：将 .elf 上传为 artifact（可在 Actions 页面下载）──────────
-      - name: 上传固件 artifact
+      - name: Build
+        run: cmake --build build_ci -j4
+
+      - name: Print firmware size
+        run: arm-none-eabi-size build_ci/at32f403a_template.elf
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ github.sha }}   # 用 commit hash 命名，确保唯一
+          name: firmware-${{ github.sha }}
           path: |
-            build/ci/*.elf
-            build/ci/*.map
-          if-no-files-found: error           # 没有产物时直接失败
-
-  # ===========================================================================
-  # Job 2：宿主机单元测试（无需 ARM 工具链）
-  # ===========================================================================
-  # 嵌入式单元测试策略：
-  #   ✅ 纯逻辑函数  → 用宿主机 GCC 编译，直接运行
-  #   ❌ 硬件寄存器操作 → 不测（或用 Mock 替代，进阶内容）
-  # ===========================================================================
-  unit-tests:
-    name: "🧪 单元测试 (Host GCC)"
-    runs-on: ubuntu-latest   # ubuntu-latest 自带 gcc，无需额外安装
-
-    steps:
-      - name: 拉取代码
-        uses: actions/checkout@v4
-
-      - name: 编译并运行测试
-        working-directory: tests   # 等价于 cd tests
-        run: make test
-        # make test 内部：
-        #   1. gcc 编译 test_button_logic.c + button_logic.c
-        #   2. 运行可执行文件
-        #   3. 失败时返回非零 → job 标红
-
-  # ===========================================================================
-  # Job 3：代码格式检查（可选，演示 CI 阶段扩展）
-  # ===========================================================================
-  lint:
-    name: "📐 格式检查 (clang-format)"
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 安装 clang-format
-        run: sudo apt-get install -y -qq clang-format
-
-      - name: 检查 project/ 下所有 C/H 文件格式
-        run: |
-          find project/src project/inc project/board \
-            \( -name "*.c" -o -name "*.h" \) \
-            -print0 | xargs -0 clang-format --dry-run --Werror --style=file 2>&1
-        # --style=file 读取根目录 .clang-format
-        # --dry-run --Werror：发现格式问题则退出码非零
-        # 若本 job 失败，说明有文件格式不符合 .clang-format 规则
-        continue-on-error: true   # 初期设为 true，格式不符只警告不阻断
-        # 待团队统一格式后，删掉此行改为强制模式
+            build_ci/at32f403a_template.elf
+            build_ci/at32f403a_template.hex
+            build_ci/at32f403a_template.bin
+          if-no-files-found: error
+          retention-days: 30
